@@ -1,6 +1,120 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
+let schemaReady = false;
+
+async function ensureSchema() {
+  if (schemaReady) return;
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS "HunterProfile" (
+      "id" TEXT NOT NULL PRIMARY KEY DEFAULT 'default-hunter',
+      "onboarded" BOOLEAN NOT NULL DEFAULT false,
+      "name" TEXT NOT NULL DEFAULT '',
+      "title" TEXT NOT NULL DEFAULT 'Рекрут першого рангу',
+      "hunterClass" TEXT NOT NULL DEFAULT 'Стратег',
+      "mainGoal" TEXT NOT NULL DEFAULT '',
+      "bio" TEXT NOT NULL DEFAULT '',
+      "level" INTEGER NOT NULL DEFAULT 1,
+      "xp" INTEGER NOT NULL DEFAULT 0,
+      "xpToNextLevel" INTEGER NOT NULL DEFAULT 100,
+      "hp" INTEGER NOT NULL DEFAULT 100,
+      "maxHp" INTEGER NOT NULL DEFAULT 100,
+      "mp" INTEGER NOT NULL DEFAULT 50,
+      "maxMp" INTEGER NOT NULL DEFAULT 50,
+      "gold" INTEGER NOT NULL DEFAULT 0,
+      "streakDays" INTEGER NOT NULL DEFAULT 0,
+      "freezeShields" INTEGER NOT NULL DEFAULT 1,
+      "statPoints" INTEGER NOT NULL DEFAULT 0,
+      "str" INTEGER NOT NULL DEFAULT 10,
+      "intel" INTEGER NOT NULL DEFAULT 10,
+      "dex" INTEGER NOT NULL DEFAULT 10,
+      "wil" INTEGER NOT NULL DEFAULT 10,
+      "cha" INTEGER NOT NULL DEFAULT 10,
+      "focusMinutesTotal" INTEGER NOT NULL DEFAULT 0,
+      "bountiesSlain" INTEGER NOT NULL DEFAULT 0,
+      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS "Quest" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "title" TEXT NOT NULL,
+      "description" TEXT NOT NULL DEFAULT '',
+      "rank" TEXT NOT NULL DEFAULT 'C',
+      "stat" TEXT NOT NULL DEFAULT 'INT',
+      "xpReward" INTEGER NOT NULL DEFAULT 35,
+      "goldReward" INTEGER NOT NULL DEFAULT 20,
+      "isFrog" BOOLEAN NOT NULL DEFAULT false,
+      "completed" BOOLEAN NOT NULL DEFAULT false,
+      "subquests" TEXT NOT NULL DEFAULT '[]',
+      "estimatedMinutes" INTEGER NOT NULL DEFAULT 25,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "completedAt" DATETIME
+    )`,
+    `CREATE TABLE IF NOT EXISTS "DailyRitual" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "title" TEXT NOT NULL,
+      "stat" TEXT NOT NULL DEFAULT 'WIL',
+      "streak" INTEGER NOT NULL DEFAULT 0,
+      "completedToday" BOOLEAN NOT NULL DEFAULT false,
+      "xpReward" INTEGER NOT NULL DEFAULT 25,
+      "goldReward" INTEGER NOT NULL DEFAULT 15,
+      "hpPenalty" INTEGER NOT NULL DEFAULT 10,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS "HabitDemon" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "title" TEXT NOT NULL,
+      "type" TEXT NOT NULL DEFAULT 'DEMON',
+      "stat" TEXT NOT NULL DEFAULT 'WIL',
+      "cleanDays" INTEGER NOT NULL DEFAULT 0,
+      "urgesResisted" INTEGER NOT NULL DEFAULT 0,
+      "relapses" INTEGER NOT NULL DEFAULT 0,
+      "xpValue" INTEGER NOT NULL DEFAULT 20,
+      "goldValue" INTEGER NOT NULL DEFAULT 15,
+      "hpPenalty" INTEGER NOT NULL DEFAULT 15,
+      "lastActionAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS "FocusSession" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "questTitle" TEXT NOT NULL,
+      "monsterName" TEXT NOT NULL,
+      "minutes" INTEGER NOT NULL,
+      "overdriveMinutes" INTEGER NOT NULL DEFAULT 0,
+      "xpEarned" INTEGER NOT NULL,
+      "goldEarned" INTEGER NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'VICTORY',
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS "TavernItem" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "title" TEXT NOT NULL,
+      "description" TEXT NOT NULL,
+      "category" TEXT NOT NULL DEFAULT 'REAL_REWARD',
+      "cost" INTEGER NOT NULL,
+      "icon" TEXT NOT NULL DEFAULT 'reward',
+      "effectType" TEXT NOT NULL DEFAULT 'CUSTOM',
+      "ownedCount" INTEGER NOT NULL DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS "ReflectionLog" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "dateLabel" TEXT NOT NULL,
+      "moodScore" INTEGER NOT NULL DEFAULT 4,
+      "energyScore" INTEGER NOT NULL DEFAULT 4,
+      "wins" TEXT NOT NULL,
+      "blockers" TEXT NOT NULL,
+      "tomorrowFrog" TEXT NOT NULL,
+      "xpEarned" INTEGER NOT NULL DEFAULT 50,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  ];
+
+  for (const sql of statements) {
+    await prisma.$executeRawUnsafe(sql);
+  }
+  schemaReady = true;
+}
+
 const RANK_REWARDS: Record<string, { xp: number; gold: number; minutes: number }> = {
   E: { xp: 15, gold: 10, minutes: 10 },
   D: { xp: 25, gold: 15, minutes: 20 },
@@ -77,6 +191,7 @@ async function applyXpAndGold(
 }
 
 async function ensureInitialized() {
+  await ensureSchema();
   const existing = await prisma.hunterProfile.findUnique({
     where: { id: "default-hunter" },
   });
@@ -691,6 +806,132 @@ export async function POST(request: Request) {
         }
 
         await applyXpAndGold(xpReward, goldReward, "WIL", 15);
+        break;
+      }
+
+      case "RESTORE_SNAPSHOT": {
+        const snap = payload.snapshot;
+        if (!snap || !snap.profile) break;
+
+        const p = snap.profile;
+        await prisma.hunterProfile.upsert({
+          where: { id: "default-hunter" },
+          update: {
+            onboarded: Boolean(p.onboarded),
+            name: String(p.name || ""),
+            title: String(p.title || "Рекрут першого рангу"),
+            hunterClass: String(p.hunterClass || "Стратег"),
+            mainGoal: String(p.mainGoal || ""),
+            bio: String(p.bio || ""),
+            level: Number(p.level) || 1,
+            xp: Number(p.xp) || 0,
+            xpToNextLevel: Number(p.xpToNextLevel) || 100,
+            hp: Number(p.hp) || 100,
+            maxHp: Number(p.maxHp) || 100,
+            mp: Number(p.mp) || 50,
+            maxMp: Number(p.maxMp) || 50,
+            gold: Number(p.gold) || 0,
+            streakDays: Number(p.streakDays) || 0,
+            freezeShields: Number(p.freezeShields) || 1,
+            statPoints: Number(p.statPoints) || 0,
+            str: Number(p.str) || 10,
+            intel: Number(p.intel) || 10,
+            dex: Number(p.dex) || 10,
+            wil: Number(p.wil) || 10,
+            cha: Number(p.cha) || 10,
+            focusMinutesTotal: Number(p.focusMinutesTotal) || 0,
+            bountiesSlain: Number(p.bountiesSlain) || 0,
+          },
+          create: {
+            id: "default-hunter",
+            onboarded: Boolean(p.onboarded),
+            name: String(p.name || ""),
+            title: String(p.title || "Рекрут першого рангу"),
+            hunterClass: String(p.hunterClass || "Стратег"),
+            mainGoal: String(p.mainGoal || ""),
+            bio: String(p.bio || ""),
+            level: Number(p.level) || 1,
+            xp: Number(p.xp) || 0,
+            xpToNextLevel: Number(p.xpToNextLevel) || 100,
+            hp: Number(p.hp) || 100,
+            maxHp: Number(p.maxHp) || 100,
+            mp: Number(p.mp) || 50,
+            maxMp: Number(p.maxMp) || 50,
+            gold: Number(p.gold) || 0,
+            streakDays: Number(p.streakDays) || 0,
+            freezeShields: Number(p.freezeShields) || 1,
+            statPoints: Number(p.statPoints) || 0,
+            str: Number(p.str) || 10,
+            intel: Number(p.intel) || 10,
+            dex: Number(p.dex) || 10,
+            wil: Number(p.wil) || 10,
+            cha: Number(p.cha) || 10,
+            focusMinutesTotal: Number(p.focusMinutesTotal) || 0,
+            bountiesSlain: Number(p.bountiesSlain) || 0,
+          },
+        });
+
+        if (Array.isArray(snap.quests) && snap.quests.length > 0) {
+          await prisma.quest.deleteMany();
+          for (const q of snap.quests) {
+            await prisma.quest.create({
+              data: {
+                id: q.id,
+                title: q.title,
+                description: q.description || "",
+                rank: q.rank || "C",
+                stat: q.stat || "INT",
+                xpReward: Number(q.xpReward) || 35,
+                goldReward: Number(q.goldReward) || 20,
+                isFrog: Boolean(q.isFrog),
+                completed: Boolean(q.completed),
+                subquests:
+                  typeof q.subquests === "string"
+                    ? q.subquests
+                    : JSON.stringify(q.subquests || []),
+                estimatedMinutes: Number(q.estimatedMinutes) || 25,
+              },
+            });
+          }
+        }
+
+        if (Array.isArray(snap.dailies) && snap.dailies.length > 0) {
+          await prisma.dailyRitual.deleteMany();
+          for (const d of snap.dailies) {
+            await prisma.dailyRitual.create({
+              data: {
+                id: d.id,
+                title: d.title,
+                stat: d.stat || "WIL",
+                streak: Number(d.streak) || 0,
+                completedToday: Boolean(d.completedToday),
+                xpReward: Number(d.xpReward) || 25,
+                goldReward: Number(d.goldReward) || 15,
+                hpPenalty: Number(d.hpPenalty) || 10,
+              },
+            });
+          }
+        }
+
+        if (Array.isArray(snap.habits) && snap.habits.length > 0) {
+          await prisma.habitDemon.deleteMany();
+          for (const h of snap.habits) {
+            await prisma.habitDemon.create({
+              data: {
+                id: h.id,
+                title: h.title,
+                type: h.type || "DEMON",
+                stat: h.stat || "WIL",
+                cleanDays: Number(h.cleanDays) || 0,
+                urgesResisted: Number(h.urgesResisted) || 0,
+                relapses: Number(h.relapses) || 0,
+                xpValue: Number(h.xpValue) || 20,
+                goldValue: Number(h.goldValue) || 15,
+                hpPenalty: Number(h.hpPenalty) || 15,
+              },
+            });
+          }
+        }
         break;
       }
     }

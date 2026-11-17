@@ -235,10 +235,39 @@ export function ShadowSystemDashboard() {
     try {
       const res = await fetch("/api/rpg");
       if (!res.ok) {
-        throw new Error("Не вдалося завантажити стан із локальної бази даних.");
+        throw new Error("Не вдалося завантажити стан із бази даних.");
       }
-      const json: RpgStatePayload = await res.json();
+      let json: RpgStatePayload = await res.json();
+
+      // If Vercel serverless cold-started an empty /tmp DB, restore from browser snapshot
+      if (json.profile && !json.profile.onboarded && typeof window !== "undefined") {
+        const cachedRaw = window.localStorage.getItem("mysloptrainer_snapshot_v1");
+        if (cachedRaw) {
+          try {
+            const cached: RpgStatePayload = JSON.parse(cachedRaw);
+            if (cached?.profile?.onboarded) {
+              const restoreRes = await fetch("/api/rpg", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  action: "RESTORE_SNAPSHOT",
+                  payload: { snapshot: cached },
+                }),
+              });
+              if (restoreRes.ok) {
+                json = await restoreRes.json();
+              }
+            }
+          } catch {
+            // ignore corrupted local snapshot
+          }
+        }
+      }
+
       setData(json);
+      if (json.profile?.onboarded && typeof window !== "undefined") {
+        window.localStorage.setItem("mysloptrainer_snapshot_v1", JSON.stringify(json));
+      }
       if (json.profile) {
         setObName(json.profile.name || "");
         setObClass(json.profile.hunterClass || "Стратег");
@@ -317,6 +346,9 @@ export function ShadowSystemDashboard() {
     if (res.ok) {
       const updated: RpgStatePayload = await res.json();
       setData(updated);
+      if (updated.profile?.onboarded && typeof window !== "undefined") {
+        window.localStorage.setItem("mysloptrainer_snapshot_v1", JSON.stringify(updated));
+      }
       if (updated.profile.level > prevLevel) {
         soundEngine.playLevelUp();
         showNotification(
