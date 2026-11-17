@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model HunterProfile {
+  id                String   @id @default("default-hunter")
+  onboarded         Boolean  @default(false)
+  name              String   @default("")
+  title             String   @default("Рекрут першого рангу")
+  hunterClass       String   @default("Стратег")
+  mainGoal          String   @default("")
+  bio               String   @default("")
+  level             Int      @default(1)
+  xp                Int      @default(0)
+  xpToNextLevel     Int      @default(100)
+  hp                Int      @default(100)
+  maxHp             Int      @default(100)
+  mp                Int      @default(50)
+  maxMp             Int      @default(50)
+  gold              Int      @default(0)
+  streakDays        Int      @default(0)
+  freezeShields     Int      @default(1)
+  statPoints        Int      @default(0)
+  str               Int      @default(10)
+  intel             Int      @default(10)
+  dex               Int      @default(10)
+  wil               Int      @default(10)
+  cha               Int      @default(10)
+  focusMinutesTotal Int      @default(0)
+  bountiesSlain     Int      @default(0)
+  updatedAt         DateTime @updatedAt
+}
+
+model Quest {
+  id               String    @id @default(cuid())
+  title            String
+  description      String    @default("")
+  rank             String    @default("C")
+  stat             String    @default("INT")
+  xpReward         Int       @default(35)
+  goldReward       Int       @default(20)
+  isFrog           Boolean   @default(false)
+  completed        Boolean   @default(false)
+  subquests        String    @default("[]")
+  estimatedMinutes Int       @default(25)
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+}
+
+model DailyRitual {
+  id             String   @id @default(cuid())
+  title          String
+  stat           String   @default("WIL")
+  streak         Int      @default(0)
+  completedToday Boolean  @default(false)
+  xpReward       Int      @default(25)
+  goldReward     Int      @default(15)
+  hpPenalty      Int      @default(10)
+  createdAt      DateTime @default(now())
+}
+
+model HabitDemon {
+  id            String   @id @default(cuid())
+  title         String
+  type          String   @default("DEMON")
+  stat          String   @default("WIL")
+  cleanDays     Int      @default(0)
+  urgesResisted Int      @default(0)
+  relapses      Int      @default(0)
+  xpValue       Int      @default(20)
+  goldValue     Int      @default(15)
+  hpPenalty     Int      @default(15)
+  lastActionAt  DateTime @default(now())
+}
+
+model FocusSession {
+  id               String   @id @default(cuid())
+  questTitle       String
+  monsterName      String
+  minutes          Int
+  overdriveMinutes Int      @default(0)
+  xpEarned         Int
+  goldEarned       Int
+  status           String   @default("VICTORY")
+  createdAt        DateTime @default(now())
+}
+
+model TavernItem {
+  id          String @id @default(cuid())
+  title       String
+  description String
+  category    String @default("REAL_REWARD")
+  cost        Int
+  icon        String @default("reward")
+  effectType  String @default("CUSTOM")
+  ownedCount  Int    @default(0)
+}
+
+model ReflectionLog {
+  id           String   @id @default(cuid())
+  dateLabel    String
+  moodScore    Int      @default(4)
+  energyScore  Int      @default(4)
+  wins         String
+  blockers     String
+  tomorrowFrog String
+  xpEarned     Int      @default(50)
+  createdAt    DateTime @default(now())
+}
